@@ -41,10 +41,11 @@ func (c *char) Skill(p map[string]int) (action.Info, error) {
 	if !ok {
 		travel = 10
 	}
+	c.skillTravel = travel
 	if p["hold"] == 1 {
-		return c.skillHold(travel)
+		return c.skillHold()
 	}
-	return c.skillPress(travel)
+	return c.skillPress()
 }
 
 func (c *char) makeParticleCB() info.AttackCBFunc {
@@ -63,9 +64,12 @@ func (c *char) makeParticleCB() info.AttackCBFunc {
 	}
 }
 
-func (c *char) skillPress(travel int) (action.Info, error) {
-	c.pawsPewPew(skillPressHitmark, travel, 2)
-	c.SetCDWithDelay(action.ActionSkill, 360, skillPressHitmark)
+func (c *char) skillPress() (action.Info, error) {
+	c.pawsPewPew(skillPressHitmark, c.skillTravel, 2)
+	c.QueueCharTask(func() {
+		c.SetCD(action.ActionSkill, 360)
+		c.revelationOnSkill()
+	}, skillPressHitmark)
 
 	return action.Info{
 		Frames:          frames.NewAbilFunc(skillPressFrames),
@@ -75,9 +79,13 @@ func (c *char) skillPress(travel int) (action.Info, error) {
 	}, nil
 }
 
-func (c *char) skillHold(travel int) (action.Info, error) {
-	c.pawsPewPew(skillHoldHitmark, travel, 5)
-	c.SetCDWithDelay(action.ActionSkill, 900, skillHoldHitmark)
+func (c *char) skillHold() (action.Info, error) {
+	c.pawsPewPew(skillHoldHitmark, c.skillTravel, 5)
+
+	c.QueueCharTask(func() {
+		c.SetCD(action.ActionSkill, 900)
+		c.revelationOnSkill()
+	}, skillHoldHitmark)
 
 	return action.Info{
 		Frames:          frames.NewAbilFunc(skillHoldFrames),
@@ -93,9 +101,7 @@ func (c *char) pawsPewPew(f, travel, pawCount int) {
 		bonus = 1.75 // bonus if firing off 5
 	}
 	shdHp := (pawShieldPer[c.TalentLvlSkill()]*c.MaxHP() + pawShieldFlat[c.TalentLvlSkill()]) * bonus
-	if c.Base.Cons >= 2 {
-		shdHp *= 1.15
-	}
+	shdHp *= 1 + c.c2BonusShield()
 	skillSrc := c.Core.F
 	// call back to generate shield on hit
 	// note that each paw should only be able to trigger callback once (if hit multi target)
